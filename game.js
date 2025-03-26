@@ -16,11 +16,11 @@ const GameConfig = {
     height: 25,
     wallColor: 0x654321,
     playerColors: [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFFA500],
-    defaultColor: 0x000000 // Черный цвет по умолчанию
+    defaultColor: 0x000000
   },
   player: {
     nameTextStyle: {
-      fill: 0xFFFFFF,
+      fill: 0xFFF00F,
       fontSize: 14,
       fontWeight: 'bold',
       stroke: 0x000000,
@@ -28,7 +28,7 @@ const GameConfig = {
     }
   },
   app: {
-    backgroundColor: '#1099bb'
+    backgroundColor: '#efe904'
   }
 };
 
@@ -41,6 +41,9 @@ class Game {
     this.app = null;
     this.antFrames = [];
     this.mazeGraphics = null;
+    this.gameEnded = false;
+    this.winnerText = null;
+    this.restartText = null;
   }
 
   async init() {
@@ -56,6 +59,7 @@ class Game {
     this.tileSize = this.calculateTileSize();
     this.initMaze();
     this.initFpsCounter();
+    this.initWinText();
   
     return this;
   }
@@ -76,7 +80,7 @@ class Game {
 
   generateMaze() {
     return [
-      [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       [0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
       [1,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1],
       [1,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
@@ -99,7 +103,7 @@ class Game {
       [1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1],
       [1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1],
       [1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
       [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
     ];
   }
@@ -126,6 +130,15 @@ class Game {
       }
     }
     
+    this.mazeGraphics.beginFill(0x00FF00);
+    const exitX = this.maze[0].length - 1;
+    const exitY = this.maze.length - 2;
+    this.mazeGraphics.drawRect(
+      exitX * this.tileSize, 
+      exitY * this.tileSize, 
+      this.tileSize, 
+      this.tileSize
+    );
     this.mazeGraphics.endFill();
   }
 
@@ -133,6 +146,64 @@ class Game {
     this.fpsText = new Text("FPS: 0", { fill: "white", fontSize: 16 });
     this.fpsText.position.set(10, 10);
     this.app.stage.addChild(this.fpsText);
+  }
+
+  initWinText() {
+    this.winnerText = new Text("", { 
+      fill: "white", 
+      fontSize: 36, 
+      fontWeight: 'bold',
+      stroke: 0x000000,
+      strokeThickness: 4
+    });
+    this.winnerText.anchor.set(0.5);
+    this.winnerText.position.set(this.app.view.width / 2, this.app.view.height / 2 - 50);
+    this.winnerText.visible = false;
+    this.app.stage.addChild(this.winnerText);
+
+    this.restartText = new Text("Нажмите R для рестарта", { 
+      fill: "white", 
+      fontSize: 24,
+      stroke: 0x000000,
+      strokeThickness: 2
+    });
+    this.restartText.anchor.set(0.5);
+    this.restartText.position.set(this.app.view.width / 2, this.app.view.height / 2 + 50);
+    this.restartText.visible = false;
+    this.app.stage.addChild(this.restartText);
+  }
+
+  showWinMessage(playerName, color) {
+    this.gameEnded = true;
+    this.winnerText.text = `${playerName} победил!`;
+    this.winnerText.style.fill = color;
+    this.winnerText.visible = true;
+    this.restartText.visible = true;
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'r') {
+        this.restartGame();
+      }
+    });
+  }
+
+  restartGame() {
+    this.gameEnded = false;
+    this.winnerText.visible = false;
+    this.restartText.visible = false;
+    
+    this.players.forEach(player => {
+      player.ant.position.set(this.tileSize / 2, this.tileSize + this.tileSize / 2);
+      if (player.state === myPlayer()) {
+        player.state.setState('gameFinished', false);
+        player.state.setState('winnerName', '');
+        player.state.setState('winnerColor', 0x2F00FF);
+      }
+      const initialState = this.getAntState(player);
+      player.state.setState('antState', initialState);
+    });
+    
+    window.removeEventListener('keydown', this.restartGame);
   }
 
   createPlayer(state) {
@@ -146,7 +217,7 @@ class Game {
     ant.stop();
     
     const profile = state.getProfile();
-    let playerColor = GameConfig.maze.defaultColor; // Черный по умолчанию
+    let playerColor = GameConfig.maze.defaultColor;
     
     if (profile?.color) {
       if (typeof profile.color === 'number') {
@@ -158,7 +229,6 @@ class Game {
         }
       }
     } else {
-      // Если цвет не указан, выбираем из списка по порядку
       const playerIndex = this.players.length % GameConfig.maze.playerColors.length;
       playerColor = GameConfig.maze.playerColors[playerIndex];
     }
@@ -191,6 +261,14 @@ class Game {
   }
 
   updatePlayer(player) {
+    const gameFinished = myPlayer().getState('gameFinished');
+    if (gameFinished) {
+        this.gameEnded = true;
+        return this.getAntState(player);
+    }
+    
+    if (this.gameEnded) return this.getAntState(player);
+    
     const { state, joystick, ant } = player;
     const isPressed = joystick.isJoystickPressed();
     const angle = joystick.angle();
@@ -208,7 +286,11 @@ class Game {
       this.moveAnt(player, moveX, moveY);
       
       if (this.checkWin(ant.x, ant.y)) {
-        state.setState('finished', true);
+        if (state === myPlayer()) {
+          state.setState('gameFinished', true);
+          state.setState('winnerName', player.nameText.text);
+          state.setState('winnerColor', player.color);
+        }
       }
     } else {
       this.setIdleRotation(player);
@@ -298,6 +380,14 @@ class Game {
     this.app.ticker.add(() => {
       this.fpsText.text = `FPS: ${Math.round(this.app.ticker.FPS)}`;
       
+      const gameFinished = myPlayer().getState('gameFinished');
+      if (gameFinished && !this.gameEnded) {
+        this.gameEnded = true;
+        const winnerName = myPlayer().getState('winnerName');
+        const winnerColor = myPlayer().getState('winnerColor');
+        this.showWinMessage(winnerName, winnerColor);
+      }
+      
       const localPlayer = this.players.find(p => p.state === myPlayer());
       if (localPlayer) {
         const newState = this.updatePlayer(localPlayer);
@@ -331,5 +421,4 @@ class Game {
   }
 }
 
-// Запуск игры
 insertCoin().then(() => new Game().run());
